@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import sys
 
-import pipeline
+from core import pipeline
 from ui import banner, panel, prompt, spinner
 
 

@@ -22,7 +22,7 @@ def _load_dotenv_file() -> None:
         raise SystemExit(
             "python-dotenv is required. Install with: pip install python-dotenv"
         ) from e     
-    env_path = Path(__file__).resolve().parent / ".env"
+    env_path = Path(__file__).resolve().parent.parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)
 

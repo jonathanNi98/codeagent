@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from config import Config, get_config, make_client
+from core.config import Config, get_config, make_client
 from tools import dispatch_tool, tools_for
 
 

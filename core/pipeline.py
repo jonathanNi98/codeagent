@@ -12,9 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import planner
-import coder
-import runner
+from agents import planner, coder, runner
 from ui import banner, panel
 
 

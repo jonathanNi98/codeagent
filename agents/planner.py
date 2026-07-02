@@ -16,8 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from config import Config, get_config, make_client
-import config
+from core.config import Config, get_config, make_client
 from tools import dispatch_tool, tools_for
 
 
@@ -52,7 +51,7 @@ def run(user_msg: str, history: list[dict[str, Any]] | None = None) -> str:
     
 
     """
-    cfg = config.get_config()
+    cfg = get_config()
     client = make_client(cfg)
     messages: list[dict[str, Any]] = list(history or [])
     messages.append({"role": "user", "content": user_msg})

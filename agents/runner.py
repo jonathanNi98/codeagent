@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from config import get_config
+from core.config import get_config
 
 
 @dataclass
