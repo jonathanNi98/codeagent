@@ -32,6 +32,8 @@ import subprocess  # noqa: F401  (used by impls you write)
 from pathlib import Path
 from typing import Any
 
+from core.config import get_config
+
 
 # ============================================================================
 #                                Tool implementations
@@ -155,11 +157,18 @@ def _impl_search_file(
 
 def _impl_write_file(path: str, content: str) -> tuple[str, str | None]:
     """Overwrite (or create) ``path`` with ``content`` (full file contents)."""
-    p = Path(path)
+    # Caculate the allowed working directory to prevent writing outside of it
+    cfg = get_config()
+    allowed_workdir = Path(cfg.workdir).resolve()
+    p = Path(path).resolve()
+    
     try:
-        # 确保父目录存在(LLM 可能写 src/new/file.py,中间目录没建)
+        p.relative_to(allowed_workdir)
+    except ValueError:
+        return ("", f"write error is outside of the allowed working directory")
+    
+    try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        # 写入(覆盖或新建),显式 UTF-8 避免 Windows 上的 cp1252 编码猜测
         p.write_text(content, encoding="utf-8")
         return (f"wrote {len(content)} bytes to {path}", None)
     except OSError as e:
