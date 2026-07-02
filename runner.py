@@ -12,6 +12,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from config import get_config
 
@@ -34,39 +35,51 @@ def run_tests(
     Args:
         workdir: directory to run in. Defaults to cfg.workdir.
         cmd:     shell command to run. Defaults to cfg.test_cmd.
-
-    Suggested implementation:
-
-        cfg = get_config()
-        cwd = workdir or cfg.workdir
-        try:
-            proc = subprocess.run(
-                cmd or cfg.test_cmd,
-                shell=True,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            output = (proc.stdout or "") + (proc.stderr or "")
-            return TestResult(
-                passed=proc.returncode == 0,
-                returncode=proc.returncode,
-                output=output,
-                timed_out=False,
-            )
-        except subprocess.TimeoutExpired as e:
-            return TestResult(
-                passed=False,
-                returncode=-1,
-                output=(e.stdout or "") + (e.stderr or "") if isinstance(e.stdout, str) else "",
-                timed_out=True,
-            )
-
-    Map returncode 0 -> passed=True. Anything else -> passed=False.
     """
-    raise NotImplementedError(
-        "TODO: subprocess.run(cmd, shell=True, capture_output=True, text=True, "
-        "timeout=300). Map returncode into .passed; catch TimeoutExpired into "
-        ".timed_out."
+    def _decode(x: Any) -> str:
+        """TimeoutExpired.stdout/stderr may be bytes / str / None.
+        Coerce all three to str so TestResult.output stays well-typed.
+        """
+        if x is None:
+            return ""
+        if isinstance(x, bytes):
+            return x.decode("utf-8", errors="replace")
+        # 已经排除 None 和 bytes,剩下就是 str;用 str() 兜底
+        # Pylance 看到 bytearray / memoryview 跟 bytes 一样满足 isinstance 检查,
+        # 所以这里靠 str() 兜住
+        return str(x)
+
+    cfg = get_config()
+    cwd = workdir or cfg.workdir
+
+    try:
+        proc = subprocess.run(
+            cmd or cfg.test_cmd,
+            shell=True,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired as e:
+        return TestResult(
+            passed=False,
+            returncode=-1,
+            output=_decode(e.stdout) + _decode(e.stderr),
+            timed_out=True,
+        )
+    except OSError as e:
+        return TestResult(
+            passed=False,
+            returncode=-1,
+            output=f"shell exec error: {e}",
+            timed_out=False,
+        )
+
+    output = _decode(proc.stdout) + _decode(proc.stderr)
+    return TestResult(
+        passed=proc.returncode == 0,
+        returncode=proc.returncode,
+        output=output,
+        timed_out=False,
     )

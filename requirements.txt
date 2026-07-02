@@ -1,8 +1,6 @@
-# LLM SDK — pick whichever matches your MiniMax endpoint.
-# OpenAI-compatible (default expectation):
-openai>=1.0.0
-# Anthropic-compatible (uncomment if your provider is Anthropic-style):
-# anthropic>=0.30.0
+# LLM SDK — we use the Anthropic SDK because MiniMax exposes an
+# Anthropic-compatible endpoint at https://api.minimaxi.com/anthropic.
+anthropic>=0.30.0
 
 # .env loader
 python-dotenv>=1.0.0

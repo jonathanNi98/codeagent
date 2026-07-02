@@ -37,31 +37,43 @@ Otherwise just type a task in natural language. Press Ctrl+D to exit.
 
 def handle_command(line: str) -> bool:
     """return a slash command handler result: True if the Repl should exit, False otherwise."""
-    cmd = line.strip().lower()
+    part = line.strip().split()
+    cmd = part[0]
+    args = part[1:]
+    print(f"[debug] cmd={cmd!r}  args={args!r}")
+
     if cmd in ("/quit", "/exit", "/q"):
         return True
     elif cmd == "/help":
         print(HELP_TEXT)
-    elif cmd == "reset":
+    elif cmd == "/reset":
         print("clear conversation history")
     elif cmd == "/diff":
         print("show the most recent git diff")
+    else:
+        print(f"unknown command: {line}")
+    return False
 
 def render_result(result: pipeline.PipelineResult) -> None:
-    """Pretty-print the pipeline outcome.
+    """Pretty-print the pipeline outcome as ok/err markers + an overall verdict.
 
-    Suggested:
-        for stage in result.stages:
-            marker = '✅' if stage.ok else '❌'
-            print(f"{marker} {stage.name}: {stage.error or 'ok'}")
-            if stage.artifact:
-                panel(stage.artifact, title=f"📦 {stage.name} output")
+    Note: pipeline.run already calls ui.panel() inline for each stage's
+    artifact as it runs, so we only need to print markers + summary here.
     """
-    # TODO: implement stage-by-stage rendering.
-    # You can keep it minimal (just print markers) or full (panels per stage).
-    raise NotImplementedError(
-        "TODO: iterate result.stages, print ok/err marker, panel each artifact."
-    )
+    if not result.stages:
+        print("(no stages ran)")
+        return
+
+    for stage in result.stages:
+        marker = "✅" if stage.ok else "❌"
+        line = f"{marker} {stage.name}"
+        if stage.error:
+            line += f": {stage.error}"
+        print(line)
+
+    print()
+    overall = "✅ all stages passed" if result.ok else "❌ some stages failed"
+    print(f"[{overall}]")
 
 
 def main() -> None:

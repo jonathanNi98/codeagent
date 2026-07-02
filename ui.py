@@ -17,6 +17,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
+from rich.console import Console
+from rich.panel import Panel
 
 # ----------------------------------------------------------------------------
 # Phase banner
@@ -39,9 +41,8 @@ def banner(phase: str) -> None:
         Console().print(f"[bold {color}]── {phase.upper()} ──────────────[/]")
 
     """
-    raise NotImplementedError(
-        "TODO: Console().print(f'[bold {{color}}]── {phase.upper()} ──[/]')"
-    )
+    color = _PHASE_COLOR.get(phase, "white")
+    Console().print(f"\n[bold {color}]── {phase.upper()} ──────────────[/]")
 
 
 # ----------------------------------------------------------------------------
@@ -69,17 +70,8 @@ def tool_call_row(name: str, args: dict) -> None:
 
 def panel(text: str, title: str = "", color: str | None = None) -> None:
     """Wrap ``text`` in a rich Panel and print it.
-
-    Suggested:
-
-        from rich.panel import Panel
-        from rich.console import Console
-        Console().print(Panel(text, title=title, border_style=color or "white"))
     """
-    raise NotImplementedError(
-        "TODO: Panel(text, title=title, border_style=color)"
-    )
-
+    Console().print(Panel(text, title=title, border_style=color or "white"))
 
 # ----------------------------------------------------------------------------
 # Spinner context manager
@@ -101,9 +93,11 @@ def spinner(text: str) -> Iterator[None]:
         with Status(text, spinner="dots", console=Console()):
             yield
     """
-    raise NotImplementedError(
-        "TODO: @contextmanager that wraps Status(text, spinner='dots')."
-    )
+    print(text, end="", flush=True)
+    try:
+        yield
+    finally:
+        print(" done. ")
 
 
 # ----------------------------------------------------------------------------
@@ -112,10 +106,8 @@ def spinner(text: str) -> Iterator[None]:
 
 def prompt() -> str:
     """Print the input prompt ``❯ `` and return the user's line.
-
-    On EOF (Ctrl+D / piped end-of-input), raise EOFError or SystemExit
-    so main.py can exit cleanly.
     """
-    raise NotImplementedError(
-        "TODO: try: return input('❯ ');  except EOFError: raise SystemExit(0)"
-    )
+    try:
+        return input("❯ ")
+    except EOFError:
+        raise SystemExit(0)

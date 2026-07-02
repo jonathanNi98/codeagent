@@ -21,22 +21,17 @@ from tools import dispatch_tool, tools_for
 # ----------------------------------------------------------------------------
 # System prompt — TODO
 # ----------------------------------------------------------------------------
-#
-# Suggested content:
-#
-#   - "You are the Coder agent. You receive a numbered plan and must implement
-#      it by editing files in the working directory."
-#   - "Available tools: list_file, read_file, search_file, write_file,
-#      run_command, git_diff."
-#   - "Workflow: 1) read_file the target file. 2) write_file with the new full
-#      contents. 3) git_diff to verify. Repeat per file."
-#   - "Keep edits minimal and surgical — only change what the plan calls for.
-#      Don't refactor unrelated code."
-#   - "After your last write_file, call git_diff once more, then output a
-#      brief summary in plain text and STOP calling tools."
-#
 CODER_SYSTEM_PROMPT = """\
-TODO: write the Coder system prompt here. See docstring/comment above for guidance.
+    You are the Coder agent. You receive a numbered plan and must implement
+    it by editing files in the working directory.
+    Available tools: list_file, read_file, search_file, write_file,
+    run_command, git_diff.
+    Workflow: 1) read_file the target file. 2) write_file with the new full
+    contents. 3) git_diff to verify. Repeat per file.
+    Keep edits minimal and surgical — only change what the plan calls for.
+    Don't refactor unrelated code.
+    After your last write_file, call git_diff once more, then output a
+    brief summary in plain text and STOP calling tools.
 """
 
 
@@ -59,7 +54,38 @@ def run(plan_text: str, history: list[dict[str, Any]] | None = None) -> str:
     The only real difference is the system prompt and the initial user
     message ("implement this plan:\n\n{plan_text}").
     """
-    raise NotImplementedError(
-        "TODO: implement the Coder agent loop. Mirror Planner.run; "
-        "swap tools_for('planner') -> tools_for('coder')."
-    )
+    cfg: Config = get_config()
+    client = make_client(cfg)
+    
+    messages: list[dict[str, Any]] = list(history or [])
+    messages.append({"role": "user",
+                     "content": f"Here is a plan to implement:\n\n{plan_text}\n\n"
+                                f"Implement it by editing files. Use write_file to apply "
+                                f"each change, then git_diff to verify. After the last "
+                                f"write_file, call git_diff once more and stop calling tools, "
+                                f"then output a brief summary."})    
+    
+    while True:
+        resp = client.messages.create(
+            model=cfg.model_name,
+            system=CODER_SYSTEM_PROMPT,
+            messages=messages,
+            tools=tools_for("coder"),
+            max_tokens=4096,
+        )
+        
+        if resp.stop_reason == "end_turn":
+            return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        messages.append({"role": "assistant", "content": resp.content})
+        
+        tool_results = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use":
+                result = dispatch_tool(block.name, block.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
+        messages.append({"role": "user", "content": tool_results})
+            

@@ -40,52 +40,38 @@ class PipelineResult:
 
 def run(user_msg: str) -> PipelineResult:
     """Drive Planner → Coder → Runner on a single user request.
-
-    Returns a PipelineResult. Each stage's exception is captured into that
-    stage's ``error`` field (rather than propagating) so that downstream
-    stages can still see what earlier stages produced. If the Planner fails,
-    return immediately — there's no plan to code from.
-
-    TODO (you implement): the structure is fixed, the body is yours.
-
-        result = PipelineResult()
-
-        # --- Planner ---
-        banner("planner")
-        try:
-            plan_text = planner.run(user_msg)
-            result.stages.append(StageResult("planner", True, artifact=plan_text))
-            panel(plan_text, title="Plan")
-        except Exception as e:
-            result.stages.append(StageResult("planner", False, error=str(e)))
-            return result
-
-        # --- Coder ---
-        banner("coder")
-        try:
-            summary = coder.run(plan_text)
-            result.stages.append(StageResult("coder", True, artifact=summary))
-            panel(summary, title="Coder summary")
-        except Exception as e:
-            result.stages.append(StageResult("coder", False, error=str(e)))
-            return result
-
-        # --- Runner ---
-        banner("runner")
-        try:
-            test = runner.run_tests()
-            result.stages.append(StageResult(
-                "runner",
-                ok=test.passed,
-                artifact=test.output,
-                error=None if test.passed else f"tests failed (exit {test.returncode})",
-            ))
-        except Exception as e:
-            result.stages.append(StageResult("runner", False, error=str(e)))
-
-        return result
+    Planner->Coder->Runner is a linear pipeline, so if any stage fails, the rest are skipped.
+    Returns a PipelineResult with per-stage ok/error status and artifacts.
     """
-    raise NotImplementedError(
-        "TODO: orchestrate planner.run -> coder.run -> runner.run_tests "
-        "with per-stage exception capture. See docstring pseudocode."
-    )
+    
+    result = PipelineResult()
+    
+    banner("planner")
+    try:
+        plan_text = planner.run(user_msg)
+        result.stages.append(StageResult(name="planner", ok=True, artifact=plan_text))
+        panel(plan_text, title="📋 Plan")    
+    except Exception as e:
+        result.stages.append(StageResult(name="planner", ok=False, error=str(e)))
+        return result
+    
+    banner("coder")
+    try:
+        code_text = coder.run(plan_text)
+        result.stages.append(StageResult(name="coder", ok=True, artifact=code_text))
+        panel(code_text, title="Code")
+    except Exception as e:
+        result.stages.append(StageResult(name="coder", ok=False, error=str(e)))
+        return result
+    
+    banner("runner")
+    try:
+        test = runner.run_tests()
+        result.stages.append(StageResult(name="runner", ok=test.passed, artifact=test.output,
+                                         error=None if test.passed else "Tests failed"))
+        panel(test.output,title="Test Output", color="green" if test.passed else "red")
+    except Exception as e:
+        result.stages.append(StageResult(name="runner", ok=False, error=str(e)))
+        return result
+    
+    return result
