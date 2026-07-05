@@ -15,3 +15,7 @@ resp.stop_reason ∈ {"end_turn", "tool_use", "max_tokens"}这三种的结束方
     (1)coder这边没拦截，直接将planner这边的输出当做计划了，需要加强prompt隔离。
     (2)coder修改了不该修改的文件，需要加workdir的限制。
 2.重构整个框架
+
+2026.7.5
+1.完成schema校验。一方面在prompt里面明确，planner的输出格式，另一方面用json库来提纯，清理，兜底planner的输出格式。同时明确了白名单。
+2.coder的话也是，一方面prompt明确了coder修改只能在指定的作用于内，同时对write file这个工具而言，必须在白名单内操作，否则则报错退出。

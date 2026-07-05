@@ -155,18 +155,24 @@ def _impl_search_file(
     return ("\n".join(hits), None)
 
 
-def _impl_write_file(path: str, content: str) -> tuple[str, str | None]:
+def _impl_write_file(path: str, content: str, allowed_files: frozenset[str] | None = None) -> tuple[str, str | None]:
     """Overwrite (or create) ``path`` with ``content`` (full file contents)."""
     # Caculate the allowed working directory to prevent writing outside of it
     cfg = get_config()
     allowed_workdir = Path(cfg.workdir).resolve()
     p = Path(path).resolve()
-    
+
     try:
         p.relative_to(allowed_workdir)
     except ValueError:
         return ("", f"write error is outside of the allowed working directory")
-    
+
+    # 新增：白名单检查
+    if allowed_files is not None:
+        rel = p.relative_to(allowed_workdir).as_posix()
+        if rel not in allowed_files:
+            return ("", f"write error: {rel} is not in the plan's allowed files")
+
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
@@ -245,7 +251,7 @@ DISPATCH: dict[str, Any] = {
 }
 
 
-def dispatch_tool(name: str, args: dict[str, Any]) -> str:
+def dispatch_tool(name: str, args: dict[str, Any], allowed_files: frozenset[str] | None = None) -> str:
     """Run the impl for ``name`` with ``args`` and return a single string for the LLM.
 
     Suggested formatting:
@@ -260,7 +266,10 @@ def dispatch_tool(name: str, args: dict[str, Any]) -> str:
     if impl is None:
         return f"[ERROR] unknown tool: {name}"
     try:
-        content, error = impl(**args)
+        if name == "write_file":
+            content, error = impl(**args, allowed_files=allowed_files)
+        else:
+            content, error = impl(**args)
         if error is not None:
             return f"[ERROR] {error}"
         return content

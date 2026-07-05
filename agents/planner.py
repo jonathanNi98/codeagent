@@ -27,8 +27,17 @@ PLANNER_SYSTEM_PROMPT = """\
 You are the Planner agent. You investigae a codebase using ONLY the read-only tools provided.
 The provided tools are: list_file, read_file, search_file, run_command (read-only commands), git_diff.
 You MUST NOT modify any file.
-After enough investigation, output a numbered plan, one step per line, then a final section 'fields to be modify:'
-listing the paths you expect to change, after that section, stop calling tools.
+
+When done, output exactly ONE JSON object and NOTHING else (no prose, no code fences):
+{
+  "needs_code_change": <bool>,
+  "summary": "<1-2 sentences>",
+  "steps": ["..."],
+  "files_to_modify": ["..."]
+}
+- Questions/explanations -> needs_code_change=false, put the answer in summary.
+- Coding requests -> needs_code_change=true, list every file to edit in files_to_modify.
+
 You can cap your investigation at ~8 tool calls — be efficient, don't re-read what you already read.
 """
 
@@ -89,7 +98,6 @@ def run(user_msg: str, history: list[dict[str, Any]] | None = None) -> str:
             max_tokens=4096,
         )
         
-        # DEBUG: 临时调试——看 resp 里面是什么,跑通后删掉
         print(f"[debug] stop_reason  = {resp.stop_reason!r}")
         print(f"[debug] content_len  = {len(resp.content)}")
         try:
