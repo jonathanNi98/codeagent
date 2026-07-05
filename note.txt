@@ -19,3 +19,8 @@ resp.stop_reason ∈ {"end_turn", "tool_use", "max_tokens"}这三种的结束方
 2026.7.5
 1.完成schema校验。一方面在prompt里面明确，planner的输出格式，另一方面用json库来提纯，清理，兜底planner的输出格式。同时明确了白名单。
 2.coder的话也是，一方面prompt明确了coder修改只能在指定的作用于内，同时对write file这个工具而言，必须在白名单内操作，否则则报错退出。
+3.完成了memory系统，但是暂未检验。
+首先是创建了SessionTurn保存每一轮的记录，然后要做的是把之前的进行压缩，保留Head(第一轮SessionTurn)，tail(最后三轮List[SessionTurn]),
+middle(List[str],每一个都进行了压缩).然后把compact_history给全部搞成三个str的拼接，就是context历史记录了。作为user message前面的拼接。
+最后就是把新的议论的StageResult给处理一下，Planer取artifact里面的summary，coder取artifact，runner不管先。存到这个SessionTurn。
+4.定位问题，解决一个schema校验太强的问题。

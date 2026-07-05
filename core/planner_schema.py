@@ -94,7 +94,6 @@ def parse_plan(text: str) -> Plan:
         _require(len(steps) > 0, "needs_code_change=true requires non-empty steps")
         _require(len(files) > 0, "needs_code_change=true requires non-empty files_to_modify")
     else:
-        _require(len(steps) == 0, "needs_code_change=false requires empty steps")
         _require(len(files) == 0, "needs_code_change=false requires empty files_to_modify")
 
     normalized: list[str] = []
