@@ -51,12 +51,13 @@ CODER_SYSTEM_PROMPT = """\
 # Agent loop — TODO
 # ----------------------------------------------------------------------------
 
-def run(plan_text: str, history: list[dict[str, Any]] | None = None, allowed_files: frozenset[str] | None = None) -> str:
+def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_context: str = "") -> str:
     """Run the Coder on ``plan_text`` and return its final summary text.
 
     Args:
         plan_text: the plan from the Planner.
-        history:   optional prior messages.
+        allowed_files: optional set of files the Coder is allowed to modify.
+        session_context: optional prior session context.
 
     Returns:
         The Coder's final assistant text — a brief summary of what it changed.
@@ -66,12 +67,15 @@ def run(plan_text: str, history: list[dict[str, Any]] | None = None, allowed_fil
     The only real difference is the system prompt and the initial user
     message ("implement this plan:\n\n{plan_text}").
     """
+
     cfg: Config = get_config()
     client = make_client(cfg)
 
-    messages: list[dict[str, Any]] = list(history or [])
+    messages: list[dict[str, Any]] = []
+    prefix = f"{session_context}\n" if session_context else ""
     messages.append({"role": "user",
-                     "content": f"Here is a plan to implement:\n\n{plan_text}\n\n"
+                     "content": f"{prefix}"
+                                f"Here is a plan to implement:\n\n{plan_text}\n\n"
                                 f"Allowed files you may write to:\n"
                                 f"  {sorted(allowed_files) if allowed_files else '[]'}\n\n"
                                 f"Implement it by editing files. Use write_file to apply "

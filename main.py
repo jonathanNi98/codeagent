@@ -23,7 +23,9 @@ import sys
 
 from core import pipeline
 from ui import banner, panel, prompt, spinner
+from core.history import SessionTurn, compact_history, format_session_context
 
+session_history: list[SessionTurn] = []
 
 HELP_TEXT = """\
 Available commands:
@@ -47,7 +49,7 @@ def handle_command(line: str) -> bool:
     elif cmd == "/help":
         print(HELP_TEXT)
     elif cmd == "/reset":
-        print("clear conversation history")
+        session_history.clear()
     elif cmd == "/diff":
         print("show the most recent git diff")
     else:
@@ -75,6 +77,43 @@ def render_result(result: pipeline.PipelineResult) -> None:
     overall = "✅ all stages passed" if result.ok else "❌ some stages failed"
     print(f"[{overall}]")
 
+def _extract_turn(user_msg: str, result: pipeline.PipelineResult) -> SessionTurn:
+    by_name = {s.name: s for s in result.stages}
+    
+    plan_stage = by_name.get("planner")
+    if plan_stage and plan_stage.ok:
+        try:
+            from core.planner_schema import parse_plan
+            plan_summary = parse_plan(plan_stage.artifact).summary
+        except Exception:
+            art = plan_stage.artifact or ""
+            plan_summary = art[:200] + ("..." if len(art) > 200 else "")
+    else:
+        err = plan_stage.error if plan_stage else "no stage"
+        plan_summary = f"[planner failed: {err}]"
+        
+    coder_stage = by_name.get("coder")
+    if coder_stage is None:
+        code_summary = "[skipped: needs_code_change=false]"
+    elif coder_stage.ok:
+        code_summary = coder_stage.artifact or "(empty)"
+    else:
+        code_summary = f"[coder failed: {coder_stage.error}]"
+        
+    runner_stage = by_name.get("runner")
+    if runner_stage is None:
+        test_outcome = "[skipped]"
+    elif runner_stage.ok:
+        test_outcome = "✅ passed"
+    else:
+        test_outcome = f"❌ failed: {runner_stage.error or 'see output'}"
+
+    return SessionTurn(
+        user_msg=user_msg,
+        plan_summary=plan_summary,
+        code_summary=code_summary,
+        test_outcome=test_outcome,
+    )
 
 def main() -> None:
     """REPL loop. Catches per-pipeline exceptions so the user can keep going."""
@@ -98,7 +137,10 @@ def main() -> None:
 
         try:
             with spinner("thinking…"):
-                result = pipeline.run(line)
+                ctx = format_session_context(compact_history(session_history))
+                result = pipeline.run(line, session_context=ctx)
+                session_history.append(_extract_turn(line, result))
+
             render_result(result)
         except Exception as e:
             panel(f"{type(e).__name__}: {e}", title="❌ pipeline error", color="red")

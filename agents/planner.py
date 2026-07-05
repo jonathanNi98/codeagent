@@ -46,24 +46,26 @@ You can cap your investigation at ~8 tool calls — be efficient, don't re-read 
 # Agent loop
 # ----------------------------------------------------------------------------
 
-def run(user_msg: str, history: list[dict[str, Any]] | None = None) -> str:
+def run(user_msg: str, session_context: str = "") -> str:
     """Run the Planner on ``user_msg`` and return its final plan text.
 
     Args:
         user_msg: the user's natural-language request.
-        history:  optional prior messages (each a dict in OpenAI chat format
-                  with 'role' and 'content'). Use [] for a fresh session.
+        session_context: optional prior session context.
 
     Returns:
         The Planner's final assistant text — the plan that the Coder will implement.
-    
-    
 
     """
+
     cfg = get_config()
     client = make_client(cfg)
-    messages: list[dict[str, Any]] = list(history or [])
-    messages.append({"role": "user", "content": user_msg})
+    messages: list[dict[str, Any]] = []
+    if session_context:
+        content = f"{session_context}\n{user_msg}"
+    else:
+        content = user_msg
+    messages.append({"role": "user", "content": content})
     
     while True:
         # ----------------------------------------------------------------------
