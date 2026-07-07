@@ -24,3 +24,6 @@ resp.stop_reason ∈ {"end_turn", "tool_use", "max_tokens"}这三种的结束方
 middle(List[str],每一个都进行了压缩).然后把compact_history给全部搞成三个str的拼接，就是context历史记录了。作为user message前面的拼接。
 最后就是把新的议论的StageResult给处理一下，Planer取artifact里面的summary，coder取artifact，runner不管先。存到这个SessionTurn。
 4.定位问题，解决一个schema校验太强的问题。
+
+2026.7.7
+1.runner auto debugger，加入循环，控制大模型重新跑的次数，以及增加自动修正功能。

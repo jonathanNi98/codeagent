@@ -16,10 +16,12 @@ from typing import Any
 
 from core.config import Config, get_config, make_client
 from tools import dispatch_tool, tools_for
+from core.utils import call_llm
+from core.errors import AgentTurnError
 
 
 # ----------------------------------------------------------------------------
-# System prompt — TODO
+# System prompt
 # ----------------------------------------------------------------------------
 CODER_SYSTEM_PROMPT = """\
     You are the Coder agent. You receive a numbered plan and must implement
@@ -48,16 +50,17 @@ CODER_SYSTEM_PROMPT = """\
 """
 
 # ----------------------------------------------------------------------------
-# Agent loop — TODO
+# Agent loop
 # ----------------------------------------------------------------------------
 
-def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_context: str = "") -> str:
+def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_context: str = "", test_feedback: str = "") -> str:
     """Run the Coder on ``plan_text`` and return its final summary text.
 
     Args:
         plan_text: the plan from the Planner.
         allowed_files: optional set of files the Coder is allowed to modify.
         session_context: optional prior session context.
+        test_feedback: optional prior test failure output (for retry loop).
 
     Returns:
         The Coder's final assistant text — a brief summary of what it changed.
@@ -68,6 +71,11 @@ def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_con
     message ("implement this plan:\n\n{plan_text}").
     """
 
+    feedback_block = (
+        f"\n\n=== Previous test failure (please fix) ===\n{test_feedback}\n"
+        f"=== END ===\n\n"
+        if test_feedback else ""
+    )
     cfg: Config = get_config()
     client = make_client(cfg)
 
@@ -75,6 +83,7 @@ def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_con
     prefix = f"{session_context}\n" if session_context else ""
     messages.append({"role": "user",
                      "content": f"{prefix}"
+                                f"{feedback_block}"
                                 f"Here is a plan to implement:\n\n{plan_text}\n\n"
                                 f"Allowed files you may write to:\n"
                                 f"  {sorted(allowed_files) if allowed_files else '[]'}\n\n"
@@ -84,17 +93,22 @@ def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_con
                                 f"IMPORTANT: write_file will REJECT any path not in the allowed list. "
                                 f"If you see [ERROR] on a write_file, do NOT retry the same path — stop "
                                 f"then output a brief summary."})
-    while True:
-        resp = client.messages.create(
+    
+    for _ in range(cfg.max_tool_iterations):
+        resp = call_llm(
+            client,
             model=cfg.model_name,
             system=CODER_SYSTEM_PROMPT,
             messages=messages,
             tools=tools_for("coder"),
             max_tokens=4096,
         )
-        
+
         if resp.stop_reason == "end_turn":
             return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        if resp.stop_reason != "tool_use":
+            raise AgentTurnError(f"unexpected stop_reason: {resp.stop_reason!r}")
+
         messages.append({"role": "assistant", "content": resp.content})
         
         tool_results = []
@@ -107,4 +121,8 @@ def run(plan_text: str, allowed_files: frozenset[str] | None = None, session_con
                     "content": result,
                 })
         messages.append({"role": "user", "content": tool_results})
-            
+
+    raise AgentTurnError(
+        f"exhausted {cfg.max_tool_iterations} tool-call iterations without end_turn; "
+        f"model may be stuck in a tool loop"
+    )

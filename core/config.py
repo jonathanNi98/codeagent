@@ -1,5 +1,4 @@
-"""
-config.py — load .env, expose Config dataclass, build LLM client.
+"""config.py — load .env, expose Config dataclass, build LLM client.
 
 Public surface:
   - Config            frozen dataclass holding all settings
@@ -21,10 +20,11 @@ def _load_dotenv_file() -> None:
     except ImportError as e:
         raise SystemExit(
             "python-dotenv is required. Install with: pip install python-dotenv"
-        ) from e     
+        ) from e
     env_path = Path(__file__).resolve().parent.parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)
+
 
 @dataclass(frozen=True)
 class Config:
@@ -33,6 +33,7 @@ class Config:
     model_name: str
     workdir: Path
     test_cmd: str
+    max_tool_iterations: int = 12
 
 
 def load_config() -> Config:
@@ -40,24 +41,25 @@ def load_config() -> Config:
 
     Required env vars (missing -> SystemExit):
       MINIMAX_API_KEY       your provider key
-      MINIMAX_BASE_URL      e.g. https://api.example.com/v1
+      MINIMAX_BASE_URL      e.g. https://example.com/v1
 
     Optional env vars (defaults shown):
       MINIMAX_MODEL_NAME    "MiniMax-M3"
       AGENT_WORKDIR         "./test_target"
       TEST_CMD              "pytest -q"
+      MAX_TOOL_ITERATIONS   12     # agent tool-iteration 上界
     """
     _load_dotenv_file()
-    
+
     api_key = os.environ.get("MINIMAX_API_KEY")
     base_url = os.environ.get("MINIMAX_BASE_URL")
-    
+
     if not api_key or not base_url:
         raise SystemExit(
             "Missing MINIMAX_API_KEY or MINIMAX_BASE_URL. "
             "Copy .env.example to .env and fill in the values."
         )
-    
+
     workdir = Path(os.environ.get("AGENT_WORKDIR", "./test_target")).resolve()
     return Config(
         api_key=api_key,
@@ -65,12 +67,14 @@ def load_config() -> Config:
         model_name=os.environ.get("MINIMAX_MODEL_NAME", "MiniMax-M3"),
         workdir=workdir,
         test_cmd=os.environ.get("TEST_CMD", "pytest -q"),
+        max_tool_iterations=int(os.environ.get("MAX_TOOL_ITERATIONS", "12")),
     )
+
 
 def make_client(cfg: Config) -> Any:
     """Build the Anthropic SDK client pointing at MiniMax."""
     from anthropic import Anthropic
-    return Anthropic(api_key=cfg.api_key, base_url=cfg.base_url)
+    return Anthropic(api_key=cfg.api_key, base_url=cfg.base_url, max_retries=3)
 
 _cached: Config | None = None
 

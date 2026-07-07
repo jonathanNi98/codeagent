@@ -18,7 +18,7 @@ from typing import Any
 
 from core.config import Config, get_config, make_client
 from tools import dispatch_tool, tools_for
-
+from core.utils import call_llm, AgentTurnError
 
 # ----------------------------------------------------------------------------
 # System prompt
@@ -67,7 +67,7 @@ def run(user_msg: str, session_context: str = "") -> str:
         content = user_msg
     messages.append({"role": "user", "content": content})
     
-    while True:
+    for _ in range(cfg.max_tool_iterations):
         # ----------------------------------------------------------------------
         # resp shape — verified by a real MiniMax-M3 call:
         #
@@ -92,7 +92,8 @@ def run(user_msg: str, session_context: str = "") -> str:
         #     ToolUseBlock(type='tool_use', id='toolu_01ABC',
         #                  name='list_file', input={'path': '.'})
         # ----------------------------------------------------------------------
-        resp = client.messages.create(
+        resp = call_llm(
+            client,
             model=cfg.model_name,
             system=PLANNER_SYSTEM_PROMPT,
             messages=messages,
@@ -116,6 +117,8 @@ def run(user_msg: str, session_context: str = "") -> str:
                 b.text for b in resp.content
                 if getattr(b, "type", None) == "text"
             )
+        if resp.stop_reason != "tool_use":
+            raise AgentTurnError(f"unexpected stop_reason: {resp.stop_reason!r}")
 
         messages.append({"role": "assistant", "content": resp.content})
 
@@ -129,3 +132,8 @@ def run(user_msg: str, session_context: str = "") -> str:
                     "content": result,
                 })
         messages.append({"role": "user", "content": tool_results})
+        
+    raise AgentTurnError(
+        f"exhausted {cfg.max_tool_iterations} tool-call iterations without end_turn; "
+        f"model may be stuck in a tool loop"
+    )

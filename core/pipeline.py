@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from agents import planner, coder, runner
 from ui import banner, panel
-from core.planner_schema import parse_plan, PlanParseError
+from core.planner_schema import PlanParseError, plan_with_retries
 
 @dataclass
 class StageResult:
@@ -46,10 +46,9 @@ def run(user_msg: str, session_context: str = "") -> PipelineResult:
     
     banner("planner")
     try:
-        plan_text = planner.run(user_msg, session_context=session_context)
-        plan = parse_plan(plan_text)
+        plan_text, plan = plan_with_retries(user_msg, session_context=session_context)
         result.stages.append(StageResult(name="planner", ok=True, artifact=plan_text))
-        panel(plan_text, title="📋 Plan")    
+        panel(plan_text, title="📋 Plan")
     except Exception as e:
         result.stages.append(StageResult(name="planner", ok=False, error=str(e)))
         return result
@@ -59,27 +58,45 @@ def run(user_msg: str, session_context: str = "") -> PipelineResult:
         panel(plan.summary, title="Answer")
         return result
     
-    banner("coder")
-    try:
-        code_text = coder.run(
-            plan_text,
-            allowed_files=plan.allowed_files(),
-            session_context=session_context,
-        )
-        result.stages.append(StageResult(name="coder", ok=True, artifact=code_text))
-        panel(code_text, title="Code")
-    except Exception as e:
-        result.stages.append(StageResult(name="coder", ok=False, error=str(e)))
-        return result
-    
-    banner("runner")
-    try:
-        test = runner.run_tests()
-        result.stages.append(StageResult(name="runner", ok=test.passed, artifact=test.output,
-                                         error=None if test.passed else "Tests failed"))
-        panel(test.output,title="Test Output", color="green" if test.passed else "red")
-    except Exception as e:
-        result.stages.append(StageResult(name="runner", ok=False, error=str(e)))
-        return result
-    
+    test_feedback: str = ""
+    last_test_output: str = ""
+    test_passed: bool = False
+    for attempt in range(3):
+        banner("coder" if attempt == 0 else f"coder retry {attempt}")
+        try:
+            code_text = coder.run(
+                plan_text,
+                allowed_files=plan.allowed_files(),
+                session_context=session_context,
+                test_feedback=test_feedback,
+            )
+            if attempt == 0:
+                result.stages.append(StageResult(name="coder", ok=True, artifact=code_text))
+                panel(code_text, title="Code")
+        except Exception as e:
+            result.stages.append(StageResult(name="coder", ok=False, error=str(e)))
+            return result
+        
+        banner("runner")
+        try:
+            test = runner.run_tests()
+            last_test_output = test.output
+            test_passed = test.passed
+            result.stages.append(StageResult(
+                name="runner",
+                ok=test.passed,
+                artifact=test.output,
+                error=None if test.passed else f"Tests failed (attempt {attempt + 1}/3)",
+            ))
+            panel(test.output, title="Test Output", color="green" if test.passed else "red")
+        except Exception as e:
+            result.stages.append(StageResult(name="runner", ok=False, error=str(e)))
+            return result
+        
+        if test.passed:
+            break
+        head = last_test_output[:100]
+        tail = last_test_output[-500:] if len(last_test_output) > 500 else last_test_output
+        test_feedback = f"{head}\n\n[... truncated {len(last_test_output) - 600} chars ...]\n\n{tail}"
+        
     return result

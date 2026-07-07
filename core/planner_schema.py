@@ -109,3 +109,41 @@ def parse_plan(text: str) -> Plan:
         summary=summary.strip(),
         steps=steps,
         files_to_modify=tuple(normalized))
+
+
+FEEDBACK_TEMPLATE = (
+    "\n\n[Previous attempt failed validation: {err}\n"
+    "Please re-emit ONE valid JSON object matching the schema. "
+    "Do NOT include prose or markdown fences.]\n"
+)
+
+
+def plan_with_retries(
+    user_msg: str,
+    session_context: str = "",
+    max_attempts: int = 3,
+) -> tuple[str, Plan]:
+    """调 planner.run -> parse_plan;失败时把错注回 user_msg 再试。
+
+    Returns:
+        (plan_text, Plan) —— 给 pipeline 既要原文(给 Coder)又要结构化对象。
+
+    Raises:
+        PlanParseError: 三次都失败,抛最后一次的错误。
+    """
+    from agents.planner import run as planner_run
+
+    last_err: PlanParseError | None = None
+    current_msg = user_msg
+    for attempt in range(max_attempts):
+        plan_text = planner_run(current_msg, session_context=session_context)
+        try:
+            plan = parse_plan(plan_text)
+            return plan_text, plan
+        except PlanParseError as e:
+            last_err = e
+            if attempt + 1 >= max_attempts:
+                break
+            current_msg = user_msg + FEEDBACK_TEMPLATE.format(err=e)
+    assert last_err is not None
+    raise last_err
